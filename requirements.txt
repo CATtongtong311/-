@@ -1,0 +1,30 @@
+# Core
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.14.0
+
+# Database
+peewee>=3.19.0
+
+# Logging
+loguru>=0.7.3
+
+# HTTP
+httpx>=0.28.1
+
+# Scheduling
+apscheduler>=3.11.2
+
+# Feishu / Lark
+lark-oapi>=1.5.5
+
+# Data Sources
+tushare>=1.4.29
+akshare>=1.18.11
+
+# LLM
+anthropic>=0.97.0
+openai>=1.99.0
+
+# Dev
+types-peewee
