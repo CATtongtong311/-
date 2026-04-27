@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  bot:
+    build: .
+    container_name: finance-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # 持仓文件：本地修改后立即生效
+      - ./portfolio.md:/app/portfolio.md:ro
+      # 数据库持久化
+      - ./data:/app/data
+      # 日志持久化
+      - ./logs:/app/logs
+    environment:
+      - DATABASE_URL=sqlite:///data/app.db
+      - LOG_FILE=logs/app.log
+    healthcheck:
+      test: ["CMD", "python", "-c", "from config.settings import get_settings; get_settings().validate()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

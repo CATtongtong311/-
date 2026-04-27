@@ -8,7 +8,10 @@
       "WebFetch(domain:open.feishu.cn)",
       "WebFetch(domain:github.com)",
       "Bash(python tests/test_phase1.py)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(docker build *)",
+      "Bash(export PATH=\"/c/Program Files/Docker/Docker/resources/bin:$PATH\")",
+      "Bash(timeout 5 docker run --rm -e FEISHU_APP_ID=test -e FEISHU_APP_SECRET=test -e TUSHARE_TOKEN=test -e KIMI_API_KEY=test finance-bot:latest python main.py)"
     ]
   }
 }

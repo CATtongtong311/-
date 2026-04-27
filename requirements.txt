@@ -11,6 +11,7 @@ loguru>=0.7.3
 
 # HTTP
 httpx>=0.28.1
+requests>=2.31.0
 
 # Scheduling
 apscheduler>=3.11.2

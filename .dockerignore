@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Planning / Docs
+.planning/
+*.md
+!portfolio.md
+
+# Data / Logs (挂载卷使用)
+data/*.db
+logs/*.log
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Env
+.env
+.env.example
+
+# Claude / Copilot
+.claude/
+.copilot/
