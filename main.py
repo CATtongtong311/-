@@ -1,8 +1,18 @@
 """应用入口：启动飞书网关和定时任务调度器。"""
 
+import os
 import signal
 import sys
 from pathlib import Path
+
+# 国内财经数据接口走直连，绕过本机代理（Clash/V2Ray 等）
+os.environ["NO_PROXY"] = (
+    "eastmoney.com,push2.eastmoney.com,push2his.eastmoney.com,"
+    "sina.com.cn,sinajs.cn,finance.sina.com.cn,vip.stock.finance.sina.com.cn,"
+    "tushare.pro,api.tushare.pro,baostock.com,akshare.akfamily.xyz,"
+    "127.0.0.1,localhost"
+)
+os.environ["no_proxy"] = os.environ["NO_PROXY"]
 
 from loguru import logger
 
@@ -49,6 +59,7 @@ def main():
     # 5. 创建定时任务调度器
     scheduler = SchedulerManager(
         morning_report_func=orchestrator.send_morning_report,
+        pre_fetch_func=orchestrator.pre_fetch_data,
         chat_id=getattr(settings.feishu, "default_chat_id", ""),
         hour=8,
         minute=30,

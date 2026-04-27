@@ -36,3 +36,14 @@ logs/*.zip
 # OS
 .DS_Store
 Thumbs.db
+
+# Cache
+*.db-journal
+data/cache/
+
+# Test files
+test_*.py
+
+# Claude/Copilot local configs
+.claude/settings.local.json
+.copilot/

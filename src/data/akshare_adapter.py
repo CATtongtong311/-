@@ -1,4 +1,15 @@
-"""AKShare 备用数据源封装。"""
+"""AKShare 备用数据源封装。
+
+接口选择策略（基于宿主机代理环境的稳定性测试）：
+- A股最新价/名称：stock_individual_info_em（东财，稳定）
+- A股历史日线：stock_zh_a_daily（新浪，稳定）
+- 港股历史日线：stock_hk_daily（新浪，稳定，最新价取自最后一条）
+- 个股新闻：stock_news_em（东财，稳定）
+- 美股指数：index_us_stock_sina（新浪）
+- 美债收益率：bond_zh_us_rate（新浪）
+"""
+
+from datetime import datetime
 
 from loguru import logger
 
@@ -16,44 +27,123 @@ class AkshareAdapter:
             self._ak = ak
         return self._ak
 
-    def _is_hk(self, symbol: str) -> bool:
+    @staticmethod
+    def _is_hk(symbol: str) -> bool:
         return ".HK" in symbol.upper()
+
+    @staticmethod
+    def _a_share_prefix(symbol: str) -> str:
+        """A股代码加交易所前缀（新浪接口要求）。"""
+        code = symbol.strip()
+        if code.startswith(("60", "68", "9")):
+            return f"sh{code}"
+        return f"sz{code}"
 
     def get_daily_quote(self, symbol: str) -> dict:
         """获取个股行情，返回标准化 dict。"""
         ak = self._get_ak()
-        try:
-            if self._is_hk(symbol):
-                # 港股
-                hk_code = symbol.upper().replace(".HK", "")
-                df = ak.stock_hk_hist(symbol=hk_code, period="daily", start_date="", end_date="", adjust="")
-            else:
-                # A股
-                df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date="", end_date="", adjust="")
+        if self._is_hk(symbol):
+            return self._get_hk_quote(symbol, ak)
+        return self._get_a_quote(symbol, ak)
 
+    def _get_a_quote(self, symbol: str, ak) -> dict:
+        """A股：东财获取最新价/名称，新浪获取日线算涨跌幅。"""
+        code = symbol.strip()
+        result = {
+            "symbol": symbol,
+            "name": "",
+            "open": None,
+            "high": None,
+            "low": None,
+            "close": None,
+            "volume": 0,
+            "turnover": None,
+            "change_pct": None,
+            "source": "akshare",
+            "trade_date": "",
+        }
+
+        # 1) 东财：最新价 + 股票名称 + 流通股本（用于换手率），带重试
+        for attempt in range(2):
+            try:
+                info = ak.stock_individual_info_em(symbol=code)
+                kv = {row["item"]: row["value"] for _, row in info.iterrows()}
+                result["name"] = str(kv.get("股票简称", ""))
+                latest_price = kv.get("最新")
+                if latest_price is not None:
+                    result["close"] = float(latest_price)
+                break
+            except Exception as e:
+                logger.warning("AKShare 东财个股信息获取失败 ({}), 尝试 {}/2: {}", symbol, attempt + 1, e)
+                if attempt == 0:
+                    import time
+                    time.sleep(1.5)
+
+        # 2) 新浪：历史日线（取最后两天计算涨跌幅，今天 OHLC）
+        try:
+            sina_symbol = self._a_share_prefix(code)
+            df = ak.stock_zh_a_daily(symbol=sina_symbol)
             if df is None or df.empty:
+                if not result["close"]:
+                    logger.error("AKShare 获取行情失败 ({}): 数据为空", symbol)
+                    return {}
+            else:
+                last = df.iloc[-1]
+                result["trade_date"] = str(last.get("date", ""))
+                result["open"] = float(last.get("open", 0)) if last.get("open") is not None else None
+                result["high"] = float(last.get("high", 0)) if last.get("high") is not None else None
+                result["low"] = float(last.get("low", 0)) if last.get("low") is not None else None
+                if not result["close"]:
+                    result["close"] = float(last.get("close", 0))
+                result["volume"] = int(last.get("volume", 0)) if last.get("volume") is not None else 0
+
+                # 涨跌幅：以东财最新价 / 新浪日线最后一天收盘价 与 前一天收盘价 比较
+                if len(df) >= 2:
+                    prev_close = float(df.iloc[-2].get("close", 0))
+                    if prev_close > 0 and result["close"]:
+                        result["change_pct"] = round((result["close"] - prev_close) / prev_close * 100, 2)
+                if last.get("turnover") is not None:
+                    result["turnover"] = round(float(last.get("turnover")) * 100, 2)
+        except Exception as e:
+            logger.error("AKShare 新浪日线获取失败 ({}): {}", symbol, e)
+            if not result["close"]:
                 return {}
 
-            row = df.iloc[-1]
+        return result if result["close"] else {}
+
+    def _get_hk_quote(self, symbol: str, ak) -> dict:
+        """港股：新浪历史日线（最新价 = 最后一条收盘价）。"""
+        hk_code = symbol.upper().replace(".HK", "").lstrip("0").rjust(5, "0")
+        try:
+            df = ak.stock_hk_daily(symbol=hk_code)
+            if df is None or df.empty:
+                return {}
+            last = df.iloc[-1]
+            close = float(last.get("close", 0))
+            change_pct = None
+            if len(df) >= 2:
+                prev_close = float(df.iloc[-2].get("close", 0))
+                if prev_close > 0:
+                    change_pct = round((close - prev_close) / prev_close * 100, 2)
             return {
                 "symbol": symbol,
-                "name": str(row.get("名称", "")) if "名称" in row else "",
-                "open": float(row.get("开盘", 0)) if row.get("开盘") is not None else None,
-                "high": float(row.get("最高", 0)) if row.get("最高") is not None else None,
-                "low": float(row.get("最低", 0)) if row.get("最低") is not None else None,
-                "close": float(row.get("收盘", 0)) if row.get("收盘") is not None else None,
-                "volume": int(row.get("成交量", 0)) if row.get("成交量") is not None else 0,
-                "turnover": float(row.get("换手率", 0)) if row.get("换手率") is not None else None,
-                "change_pct": float(row.get("涨跌幅", 0)) if row.get("涨跌幅") is not None else None,
+                "name": "",
+                "open": float(last.get("open", 0)) if last.get("open") is not None else None,
+                "high": float(last.get("high", 0)) if last.get("high") is not None else None,
+                "low": float(last.get("low", 0)) if last.get("low") is not None else None,
+                "close": close,
+                "volume": int(last.get("volume", 0)) if last.get("volume") is not None else 0,
+                "turnover": None,
+                "change_pct": change_pct,
                 "source": "akshare",
-                "trade_date": str(row.get("日期", "")),
+                "trade_date": str(last.get("date", "")),
             }
         except Exception as e:
-            logger.error("AKShare 获取行情失败 ({}): {}", symbol, e)
+            logger.error("AKShare 港股行情获取失败 ({}): {}", symbol, e)
             return {}
 
     def get_global_market(self) -> dict:
-        """获取全球市场数据。"""
+        """获取全球市场数据（美股三大指数 + 美债 10Y）。"""
         ak = self._get_ak()
         result = {
             "dow_jones": None,
@@ -66,95 +156,48 @@ class AkshareAdapter:
             "source": "akshare",
         }
 
+        # 美股三大指数（新浪）
+        for key, symbol in [("dow_jones", ".DJI"), ("sp500", ".INX"), ("nasdaq", ".IXIC")]:
+            try:
+                df = ak.index_us_stock_sina(symbol=symbol)
+                if df is not None and not df.empty:
+                    last = df.iloc[-1]
+                    close = float(last.get("close", 0))
+                    change_pct = None
+                    if len(df) >= 2:
+                        prev = float(df.iloc[-2].get("close", 0))
+                        if prev > 0:
+                            change_pct = round((close - prev) / prev * 100, 2)
+                    result[key] = {"close": close, "change": change_pct}
+            except Exception as e:
+                logger.debug("AKShare 美股指数 {} 获取失败: {}", symbol, e)
+
+        # 美债收益率
         try:
-            # 美股指数
-            try:
-                df_us = ak.index_us_spot()
-                if df_us is not None and not df_us.empty:
-                    for _, row in df_us.iterrows():
-                        name = str(row.get("名称", "")).lower()
-                        if "道琼" in name or "dow" in name:
-                            result["dow_jones"] = {
-                                "close": row.get("最新价"),
-                                "change": row.get("涨跌幅"),
-                            }
-                        elif "标普" in name or "s&p" in name:
-                            result["sp500"] = {
-                                "close": row.get("最新价"),
-                                "change": row.get("涨跌幅"),
-                            }
-                        elif "纳斯" in name or "nasdaq" in name:
-                            result["nasdaq"] = {
-                                "close": row.get("最新价"),
-                                "change": row.get("涨跌幅"),
-                            }
-            except Exception as e:
-                logger.debug("AKShare 美股指数获取失败: {}", e)
-
-            # 外汇（美元指数、离岸人民币）
-            try:
-                df_fx = ak.fx_spot_quote()
-                if df_fx is not None and not df_fx.empty:
-                    for _, row in df_fx.iterrows():
-                        name = str(row.get("名称", ""))
-                        if "USD" in name and "CNH" in name:
-                            result["usdcnh"] = {
-                                "close": row.get("最新价"),
-                                "change": row.get("涨跌幅"),
-                            }
-                        elif "美元指数" in name or "DXY" in name:
-                            result["usdx"] = {
-                                "close": row.get("最新价"),
-                                "change": row.get("涨跌幅"),
-                            }
-            except Exception as e:
-                logger.debug("AKShare 外汇获取失败: {}", e)
-
-            # 恒生期货
-            try:
-                df_hk = ak.futures_hk_spot()
-                if df_hk is not None and not df_hk.empty:
-                    for _, row in df_hk.iterrows():
-                        name = str(row.get("名称", ""))
-                        if "恒生" in name or "HSI" in name:
-                            result["hsi_futures"] = {
-                                "close": row.get("最新价"),
-                                "change": row.get("涨跌幅"),
-                            }
-                            break
-            except Exception as e:
-                logger.debug("AKShare 恒生期货获取失败: {}", e)
-
-            # 美债收益率
-            try:
-                df_bond = ak.bond_us_treasury()
-                if df_bond is not None and not df_bond.empty:
-                    row = df_bond.iloc[0]
-                    result["us_10y"] = {
-                        "close": row.get("收益率", row.get("close")),
-                        "change": row.get("涨跌", row.get("change")),
-                    }
-            except Exception as e:
-                logger.debug("AKShare 美债获取失败: {}", e)
-
+            df_bond = ak.bond_zh_us_rate()
+            if df_bond is not None and not df_bond.empty:
+                row = df_bond.iloc[-1]
+                us_10y = row.get("美国国债收益率10年", row.get("美国债收益率10年"))
+                if us_10y is not None:
+                    result["us_10y"] = {"close": float(us_10y), "change": None}
         except Exception as e:
-            logger.error("AKShare 获取全球市场数据失败: {}", e)
+            logger.debug("AKShare 美债获取失败: {}", e)
 
         return result
 
     def get_news(self, symbol: str) -> list[dict]:
-        """获取个股新闻。"""
+        """获取个股新闻（东财，稳定）。"""
         ak = self._get_ak()
+        code = symbol.upper().replace(".HK", "")
         try:
-            df = ak.stock_news_em(symbol=symbol)
+            df = ak.stock_news_em(symbol=code)
             if df is None or df.empty:
                 return []
-
             news = []
             for _, row in df.head(5).iterrows():
                 news.append({
-                    "title": str(row.get("标题", "")),
-                    "summary": str(row.get("内容", "")),
+                    "title": str(row.get("新闻标题", row.get("标题", ""))),
+                    "summary": str(row.get("新闻内容", row.get("内容", "")))[:200],
                     "publish_time": str(row.get("发布时间", "")),
                     "source": "akshare",
                 })

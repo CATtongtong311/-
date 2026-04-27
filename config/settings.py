@@ -10,10 +10,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
+_ENV_FILE = str(PROJECT_ROOT / ".env")
+
+
 class FeishuConfig(BaseSettings):
     """飞书应用配置。"""
 
-    model_config = SettingsConfigDict(env_prefix="FEISHU_")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8", env_prefix="FEISHU_", extra="ignore"
+    )
 
     app_id: str = Field(default="", description="飞书自建应用 App ID")
     app_secret: str = Field(default="", description="飞书自建应用 App Secret")
@@ -24,13 +29,19 @@ class FeishuConfig(BaseSettings):
 class DataSourceConfig(BaseSettings):
     """数据源配置。"""
 
-    model_config = SettingsConfigDict(env_prefix="TUSHARE_")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8", env_prefix="TUSHARE_", extra="ignore"
+    )
 
     token: str = Field(default="", description="Tushare Pro Token")
 
 
 class LLMConfig(BaseSettings):
     """LLM API 配置。"""
+
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore"
+    )
 
     claude_api_key: str = Field(default="", description="Claude API Key")
     kimi_api_key: str = Field(default="", description="Kimi / Moonshot API Key")
@@ -44,7 +55,9 @@ class LLMConfig(BaseSettings):
 class DatabaseConfig(BaseSettings):
     """数据库配置。"""
 
-    model_config = SettingsConfigDict(env_prefix="DATABASE_")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8", env_prefix="DATABASE_", extra="ignore"
+    )
 
     url: str = Field(
         default=f"sqlite:///{PROJECT_ROOT / 'data' / 'app.db'}",
@@ -55,7 +68,9 @@ class DatabaseConfig(BaseSettings):
 class LogConfig(BaseSettings):
     """日志配置。"""
 
-    model_config = SettingsConfigDict(env_prefix="LOG_")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8", env_prefix="LOG_", extra="ignore"
+    )
 
     level: str = Field(default="INFO", description="日志级别")
     file: str = Field(
@@ -96,8 +111,6 @@ class Settings(BaseSettings):
             errors.append("FEISHU_APP_SECRET: 飞书自建应用 App Secret 未配置")
         if not self.data_source.token:
             errors.append("TUSHARE_TOKEN: Tushare Pro Token 未配置")
-        if not self.llm.kimi_api_key:
-            errors.append("KIMI_API_KEY: Kimi API Key 未配置")
 
         if errors:
             raise ValueError(

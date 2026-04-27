@@ -34,11 +34,10 @@ class CardSender:
         """懒加载 lark-oapi HTTP client。"""
         if self._client is None:
             try:
-                from lark_oapi import Client
-                from lark_oapi.core.enums import AppType
+                from lark_oapi import AppType, Client
 
                 self._client = Client.builder() \
-                    .app_type(AppType.SELF_BUILT) \
+                    .app_type(AppType.SELF) \
                     .app_id(self.app_id) \
                     .app_secret(self.app_secret) \
                     .build()
@@ -61,8 +60,8 @@ class CardSender:
             client = self._get_client()
             req = CreateMessageRequest.builder() \
                 .receive_id_type("chat_id") \
-                .receive_id(chat_id) \
-                .body(CreateMessageRequestBody.builder()
+                .request_body(CreateMessageRequestBody.builder()
+                      .receive_id(chat_id)
                       .msg_type("interactive")
                       .content(json.dumps(card_with_footer))
                       .build()) \
@@ -82,8 +81,8 @@ class CardSender:
             content = json.dumps({"text": text})
             req = CreateMessageRequest.builder() \
                 .receive_id_type("chat_id") \
-                .receive_id(chat_id) \
-                .body(CreateMessageRequestBody.builder()
+                .request_body(CreateMessageRequestBody.builder()
+                      .receive_id(chat_id)
                       .msg_type("text")
                       .content(content)
                       .build()) \

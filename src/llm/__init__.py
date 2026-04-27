@@ -1,3 +1,3 @@
-from .kimi_client import KimiClient
+from .claude_code_client import ClaudeCodeClient
 
-__all__ = ["KimiClient"]
+__all__ = ["ClaudeCodeClient"]

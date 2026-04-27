@@ -11,7 +11,19 @@
       "Bash(pip install *)",
       "Bash(docker build *)",
       "Bash(export PATH=\"/c/Program Files/Docker/Docker/resources/bin:$PATH\")",
-      "Bash(timeout 5 docker run --rm -e FEISHU_APP_ID=test -e FEISHU_APP_SECRET=test -e TUSHARE_TOKEN=test -e KIMI_API_KEY=test finance-bot:latest python main.py)"
+      "Bash(timeout 5 docker run --rm -e FEISHU_APP_ID=test -e FEISHU_APP_SECRET=test -e TUSHARE_TOKEN=test -e KIMI_API_KEY=test finance-bot:latest python main.py)",
+      "WebFetch(domain:akshare.akfamily.xyz)",
+      "Bash(env 'PATH=__TRACKED_VAR__:/c/Program Files/Docker/Docker/resources/bin' docker build -t finance-bot:latest .)",
+      "Bash(curl -s \"https://api-free.itick.org/stock/stock-quote?symbol=AAPL\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -L \"https://github.com/itick-org/free-stock-api\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/itick-org/free-stock-api/main/README.md\")",
+      "Bash(curl -s \"https://api.github.com/repos/itick-org/free-stock-api/git/trees/master?recursive=1\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"from lark_oapi import AppType; print\\('[OK] AppType:', AppType\\)\")",
+      "Bash(python -c \"from src.analysis.diagnosis import DiagnosisAnalyzer; import inspect; print\\(inspect.signature\\(DiagnosisAnalyzer.__init__\\)\\)\")",
+      "Bash(nohup python *)",
+      "Bash(echo \"服务已启动，PID: $!\")"
     ]
   }
 }

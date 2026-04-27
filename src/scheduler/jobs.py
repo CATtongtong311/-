@@ -15,6 +15,7 @@ class SchedulerManager:
     def __init__(
         self,
         morning_report_func,
+        pre_fetch_func=None,
         chat_id: str = "",
         hour: int = 8,
         minute: int = 30,
@@ -22,11 +23,13 @@ class SchedulerManager:
         """
         Args:
             morning_report_func: 生成并发送晨报的可调用对象
+            pre_fetch_func: 每晚预拉取数据的可调用对象（可选）
             chat_id: 目标飞书群聊 ID
             hour: 每日触发小时
             minute: 每日触发分钟
         """
         self.morning_report_func = morning_report_func
+        self.pre_fetch_func = pre_fetch_func
         self.chat_id = chat_id
         self.hour = hour
         self.minute = minute
@@ -52,6 +55,16 @@ class SchedulerManager:
         )
         logger.info("已注册晨报清理任务: 03:00")
 
+        # 每晚 19:00 预拉取数据（缓存到本地，加速次日诊股）
+        if self.pre_fetch_func:
+            self.scheduler.add_job(
+                self._run_pre_fetch,
+                trigger=CronTrigger(hour=19, minute=0),
+                id="pre_fetch_data",
+                replace_existing=True,
+            )
+            logger.info("已注册数据预拉取任务: 19:00")
+
         self.scheduler.start()
         logger.info("调度器已启动")
 
@@ -59,6 +72,14 @@ class SchedulerManager:
         """停止调度器。"""
         self.scheduler.shutdown(wait=False)
         logger.info("调度器已停止")
+
+    def _run_pre_fetch(self):
+        """执行数据预拉取。"""
+        logger.info("开始执行数据预拉取任务...")
+        try:
+            self.pre_fetch_func()
+        except Exception as e:
+            logger.error("数据预拉取任务执行失败: {}", e)
 
     def _run_morning_report(self):
         """执行晨报生成和推送。"""
