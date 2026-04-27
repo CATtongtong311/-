@@ -34,7 +34,10 @@
   3. 用户输入 A股 6 位代码或港股代码，机器人能正确识别并准备查询
   4. 机器人发送的消息卡片底部固定显示"数据截止 HH:MM"和"AI生成内容仅供参考，不构成投资建议"
   5. 数据获取异常时（Tushare 额度耗尽或接口故障），系统自动切换 AKShare 备用源，用户无感知
-**Plans**: TBD
+**Plans**: 2 plans
+**Plan list**:
+- [ ] 02-01-PLAN.md — 飞书 WebSocket 连接与消息处理（FEISHU-01~05, DELIVERY-04, COMP-01）
+- [ ] 02-02-PLAN.md — 金融数据获取层（DATA-01~05）
 **UI hint**: yes
 
 ### Phase 3: 持仓管理与 AI 大脑
@@ -71,6 +74,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 基础骨架 | 0/TBD | Not started | - |
-| 2. 飞书连接与数据层 | 0/TBD | Not started | - |
+| 2. 飞书连接与数据层 | 0/2 | Not started | - |
 | 3. 持仓管理与 AI 大脑 | 0/TBD | Not started | - |
 | 4. 集成调度与卡片交付 | 0/TBD | Not started | - |
