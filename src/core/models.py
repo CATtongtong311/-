@@ -58,3 +58,17 @@ class ApiCallLog(BaseModel):
 
     class Meta:
         table_name = "api_call_log"
+
+
+class MorningReportRecord(BaseModel):
+    """晨报记录表：保留最近 7 天的晨报，过期自动清理。"""
+
+    report_date = DateField(index=True, help_text="晨报日期")
+    content = TextField(help_text="晨报内容（Markdown）")
+    source = CharField(max_length=50, help_text="生成来源：kimi/failed")
+    chat_id = CharField(max_length=100, default="", help_text="推送到的群聊 ID")
+    sent_at = DateTimeField(default=datetime.now, help_text="发送时间")
+    warnings = TextField(default="", help_text="生成过程中的警告信息")
+
+    class Meta:
+        table_name = "morning_report_record"
