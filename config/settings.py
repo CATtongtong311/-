@@ -80,13 +80,11 @@ class Settings(BaseSettings):
     log: LogConfig = Field(default_factory=LogConfig)
 
     def check_llm_key(self) -> str:
-        """返回可用的 LLM API Key，优先 Claude，其次 Kimi。"""
-        if self.llm.claude_api_key:
-            return "claude"
+        """返回可用的 LLM API Key，仅使用 Kimi。"""
         if self.llm.kimi_api_key:
             return "kimi"
         raise ValueError(
-            "未配置任何 LLM API Key。请在 .env 中设置 CLAUDE_API_KEY 或 KIMI_API_KEY。"
+            "未配置 Kimi API Key。请在 .env 中设置 KIMI_API_KEY。"
         )
 
     def validate(self) -> None:
@@ -98,8 +96,8 @@ class Settings(BaseSettings):
             errors.append("FEISHU_APP_SECRET: 飞书自建应用 App Secret 未配置")
         if not self.data_source.token:
             errors.append("TUSHARE_TOKEN: Tushare Pro Token 未配置")
-        if not self.llm.claude_api_key and not self.llm.kimi_api_key:
-            errors.append("CLAUDE_API_KEY / KIMI_API_KEY: 至少配置一个 LLM API Key")
+        if not self.llm.kimi_api_key:
+            errors.append("KIMI_API_KEY: Kimi API Key 未配置")
 
         if errors:
             raise ValueError(

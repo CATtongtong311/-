@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:python.plainenglish.io)",
+      "WebSearch",
+      "WebFetch(domain:feishu.apifox.cn)",
+      "WebFetch(domain:juejin.cn)",
+      "WebFetch(domain:open.feishu.cn)",
+      "WebFetch(domain:github.com)",
+      "Bash(python tests/test_phase1.py)"
+    ]
+  }
+}
