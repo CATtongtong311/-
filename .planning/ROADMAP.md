@@ -6,7 +6,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: 基础骨架** — 配置管理、日志、ORM、数据模型、安全基线
+- [x] **Phase 1: 基础骨架** — 配置管理、日志、ORM、数据模型、安全基线
 - [ ] **Phase 2: 飞书连接与数据层** — WebSocket 机器人接入 + Tushare/AKShare 数据获取
 - [ ] **Phase 3: 持仓管理与 AI 大脑** — Markdown 持仓解析 + Claude/Kimi 诊股与晨报生成
 - [ ] **Phase 4: 集成调度与卡片交付** — 中央调度、卡片模板、定时晨报、端到端打通
