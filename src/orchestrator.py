@@ -203,20 +203,71 @@ class BotOrchestrator:
         self.sender.send_card(chat_id, card)
 
     def pre_fetch_data(self) -> None:
-        """每晚 19:00 预拉取持仓数据到本地缓存。"""
+        """每晚 19:00 预拉取持仓数据到本地缓存，force_refresh 强制刷新。"""
         logger.info("开始执行数据预拉取...")
         portfolio = PortfolioParser().parse()
         total = len(portfolio.holdings)
-        fetched = 0
+        quote_ok = 0
+        quote_fail = []
+        news_ok = 0
+        news_fail = []
+
         for holding in portfolio.holdings:
+            # 行情（force_refresh 强制刷新缓存）
             try:
-                quote = self.data_fetcher.get_stock_quote(holding.symbol)
+                quote = self.data_fetcher.get_stock_quote(
+                    holding.symbol, force_refresh=True
+                )
                 if quote.source != "failed":
-                    fetched += 1
+                    quote_ok += 1
+                else:
+                    quote_fail.append(holding.symbol)
             except Exception as e:
                 logger.debug("预拉取 {} 行情失败: {}", holding.symbol, e)
+                quote_fail.append(holding.symbol)
+
+            # 新闻（force_refresh 强制刷新缓存）
             try:
-                self.data_fetcher.get_news(holding.symbol)
+                news = self.data_fetcher.get_news(holding.symbol, force_refresh=True)
+                if news:
+                    news_ok += 1
+                else:
+                    news_fail.append(holding.symbol)
             except Exception as e:
                 logger.debug("预拉取 {} 新闻失败: {}", holding.symbol, e)
-        logger.info("数据预拉取完成: {}/{} 持仓已缓存", fetched, total)
+                news_fail.append(holding.symbol)
+
+        # 全球市场数据
+        market_ok = False
+        try:
+            market = self.data_fetcher.get_global_market(force_refresh=True)
+            market_ok = market.source != "failed"
+        except Exception as e:
+            logger.debug("预拉取全球市场数据失败: {}", e)
+
+        # 清理 7 天前过期缓存
+        try:
+            cleaned = self.data_fetcher.cache.clean_expired(keep_days=7)
+        except Exception as e:
+            logger.debug("清理过期缓存失败: {}", e)
+            cleaned = 0
+
+        logger.info(
+            "数据预拉取完成: 行情 {}/{}, 新闻 {}/{}, 全球市场 {}",
+            quote_ok, total, news_ok, total, "成功" if market_ok else "失败"
+        )
+
+        # 发送汇总通知到飞书
+        chat_id = getattr(self.settings.feishu, "default_chat_id", "")
+        if chat_id:
+            lines = ["**📊 晚间数据预拉取完成**"]
+            lines.append(f"- 持仓行情: {quote_ok}/{total} 成功")
+            if quote_fail:
+                lines.append(f"- 行情失败: {', '.join(quote_fail)}")
+            lines.append(f"- 持仓新闻: {news_ok}/{total} 成功")
+            if news_fail:
+                lines.append(f"- 新闻失败: {', '.join(news_fail)}")
+            lines.append(f"- 全球市场: {'✅ 成功' if market_ok else '⚠️ 失败'}")
+            if cleaned:
+                lines.append(f"- 清理过期缓存: {cleaned} 个文件")
+            self.sender.send_text(chat_id, "\n".join(lines))

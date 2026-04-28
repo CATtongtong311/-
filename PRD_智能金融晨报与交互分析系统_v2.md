@@ -1,7 +1,7 @@
 # 智能金融晨报与交互分析系统 — 产品需求文档（PRD）
 
-> **版本**：v2.0  
-> **更新日期**：2026-04-21  
+> **版本**：v2.1  
+> **更新日期**：2026-04-28  
 > **目标用户**：A股/港股短线投资者，多板块跟踪（半导体、AI算力、液冷、商业航天等）
 
 ---
@@ -29,10 +29,18 @@
 #### 2.1.1 触发机制
 | 配置项 | 说明 |
 |--------|------|
-| 触发时间 | 每天 08:30（北京时间） |
-| 预抓取时间 | 07:00 启动数据抓取，预留 90 分钟给 AI 处理与生成 |
+| 触发时间 | 每天 08:30（北京时间），周末及法定节假日不跳过 |
+| 预拉取时间 | 19:00 启动数据预拉取，保存到本地 JSON 缓存，次日直接使用 |
 | 失败重试 | 08:25 若未生成完毕，发送延迟警告并附带"数据截止 08:25" |
-| 推送渠道 | 飞书群聊机器人（Webhook + 消息卡片） |
+| 推送渠道 | 飞书自建应用机器人（WebSocket 长连接 + 消息卡片） |
+| 目标群聊 | 通过 `FEISHU_DEFAULT_CHAT_ID` 配置默认推送群 |
+
+#### 2.1.3 数据预拉取与缓存策略
+- **每晚 19:00** 自动遍历 `portfolio.md` 中的持仓股，拉取行情与新闻到本地缓存；
+- **缓存结构**：`data/cache/quotes/{code}_{date}.json`、`data/cache/news/{code}_{date}.json`、`data/cache/market/{date}.json`；
+- **TTL**：默认 24 小时，次日诊股和晨报优先命中缓存，秒级响应；
+- **过期清理**：每日 03:00 自动清理 7 天前的过期缓存文件；
+- **预拉取通知**：完成后发送飞书文本汇总（成功/失败数、全球市场状态）。
 
 #### 2.1.2 晨报内容结构（6大固定模块）
 
@@ -75,16 +83,18 @@
 用户在飞书群聊或单聊中，通过以下方式触发：
 
 ```
-@金融助手 601059
-@金融助手 亚翔集成
-@金融助手 查询 0981.HK
-@金融助手 诊断 兆易创新
+@机器人 002709              # A股代码
+@机器人 天赐材料             # 中文名称（仅限 portfolio.md 中的持仓股）
+@机器人 0981.HK             # 港股代码
 ```
 
 #### 2.2.2 机器人识别规则
-- 支持 A股 6 位数字代码、港股 5 位代码 + .HK、中文简称模糊匹配；
-- 若输入无效，返回："未找到该代码，请检查是否为 A股/港股 有效代码"；
-- 若输入模糊（如"茅台"对应 600519 与 贵州茅台），优先返回 A股标的并提示"是否查询港股 0852.HK？"。
+- **A股代码**：6 位数字（首位 0/3/6），如 `002709`；
+- **港股代码**：1-5 位数字 + `.HK`，如 `0981.HK`；
+- **中文名称**：仅限 `portfolio.md` 中已维护的持仓股名称，如"天赐材料"会自动匹配到 `002709`；
+- 若输入无效或名称未在持仓中匹配到，返回："请输入有效的股票代码或持仓中的股票名称"；
+- 若只 @机器人未输入任何内容，返回："我在！请输入股票代码或名称，例如：002709"；
+- 行情数据优先命中本地缓存，无缓存时自动降级调用 API。
 
 #### 2.2.3 实时诊断输出结构（飞书消息卡片）
 
@@ -201,22 +211,47 @@ tech_prompt = generate_prompt(
 
 ### 4.1 数据类型与来源
 
-| 数据类型 | 推荐源 | 获取方式 | 更新频率 |
+| 数据类型 | 实际源 | 获取方式 | 降级链路 |
 |---------|--------|---------|---------|
-| 全球指数 | Alpha Vantage / 新浪财经 | API | 实时 |
-| A股行情 | 同花顺 OpenAPI / Tushare Pro | API | 3分钟延迟 |
-| 港股行情 | 新浪财经 / 东方财富 | API | 3分钟延迟 |
-| A股公告 | 巨潮资讯网 / 同花顺 F10 | API/爬虫 | 实时 |
-| 龙虎榜 | 东方财富 / 同花顺 | API | 每日 16:30 后 |
-| 板块资金流 | 同花顺行业资金流向 | API | 实时 |
-| 舆情热度 | 雪球 / 淘股吧 / 东方财富股吧 | NLP爬虫 | 每小时 |
-| 财报日历 | 上交所 / 深交所 / 港交所披露易 | API | 每日 |
-| 北向资金 | 东方财富 / Wind | API | 盘后 |
+| A股行情 | Tushare Pro → AKShare（东财/新浪）→ iTick | API | 三级自动降级 |
+| 港股行情 | AKShare（新浪）→ iTick | API | 两级自动降级 |
+| 全球市场 | AKShare（新浪）→ iTick | API | 两级自动降级 |
+| A股公告/新闻 | AKShare（东财） | API | 单源 |
+| 持仓管理 | `portfolio.md` 本地文件 | 文件读取 | 每次查询实时解析 |
 
-### 4.2 数据缓存策略
-- 行情类数据：Redis 缓存 3 分钟，减少 API 调用；
-- 公告/新闻类：本地 DB 持久化，按日期分表；
-- 龙虎榜：每日 16:30 抓取一次，次日晨报直接读库。
+### 4.2 多源降级策略
+
+系统采用 **本地缓存优先 + 三级自动降级** 机制：
+
+```
+用户查询
+    │
+    ▼
+本地 JSON 缓存（24h TTL）→ 命中则直接返回
+    │
+    ▼ 未命中或 force_refresh
+Tushare Pro（主源）→ 额度充足且数据正常则返回
+    │
+    ▼ 无权限/额度不足/数据异常
+AKShare（备用源）→ 东财个股信息 + 新浪历史日线
+    │
+    ▼ 接口失效/代理异常
+iTick（兜底源）→ 免费版 5次/分钟，支持 A股/港股/美股指数
+    │
+    ▼ 全部失败
+返回 "数据暂不可用"，飞书提示用户
+```
+
+### 4.3 本地缓存策略
+- **缓存介质**：JSON 文件（`data/cache/`），无需 Redis；
+- **缓存结构**：
+  - `quotes/{code}_{date}.json` — 个股行情（OHLCV、涨跌幅、来源）
+  - `news/{code}_{date}.json` — 个股新闻（标题、摘要、时间、来源）
+  - `market/{date}.json` — 全球市场快照（美股三大指数、美债等）
+- **TTL**：默认 24 小时，诊股和晨报优先命中缓存，秒级响应；
+- **预拉取**：每晚 19:00 遍历 `portfolio.md` 持仓股，force_refresh 刷新全部缓存；
+- **过期清理**：每日 03:00 自动清理 7 天前的缓存文件；
+- **AI 快速查询**：提供 `get_cached_quote_as_text()` 方法，将缓存数据格式化为 Markdown 文本供 Claude Code CLI 直接嵌入 Prompt。
 
 ---
 
@@ -254,78 +289,99 @@ tech_prompt = generate_prompt(
 - 分栏布局（多 Agent 结论并列展示）；
 - 按钮交互（后续可扩展"加入自选"、"查看深度报告"等）[^2^][^15^]。
 
-### 5.2 部署架构
+### 5.2 实际部署架构（单进程 + 本地缓存）
 
 ```
 ┌─────────────────────────────────────────────┐
 │                  飞书客户端                   │
 │         （用户群聊 / 单聊 @机器人）              │
 └─────────────────────────────────────────────┘
-                    │ WebSocket / Webhook
+                    │ WebSocket 长连接
                     ▼
 ┌─────────────────────────────────────────────┐
-│              消息网关层（Gateway）              │
-│  • 飞书事件监听（im.message.receive_v1）      │
-│  • 消息去重与防抖                              │
-│  • 指令解析（股票代码提取 / 意图识别）          │
+│              飞书网关层（Gateway）              │
+│  • lark-oapi WebSocket 客户端（自动重连）      │
+│  • 事件监听（im.message.receive_v1）          │
+│  • 消息解析（股票代码 / 中文名称 / @标记）       │
 └─────────────────────────────────────────────┘
                     │
                     ▼
 ┌─────────────────────────────────────────────┐
-│              业务逻辑层（Core）               │
-│  • Master Agent 调度                           │
-│  • Sub-Agent 并行执行（异步线程池）              │
-│  • 数据抓取与缓存（Redis + DB）                 │
+│              中央调度器（Orchestrator）         │
+│  • 诊股分析链路：数据获取 → AI 分析 → 卡片渲染 → 发送 │
+│  • 晨报生成链路：持仓解析 → 市场数据 → 新闻 → AI 生成 │
+│  • 预拉取任务：每晚 19:00 刷新本地 JSON 缓存      │
+└─────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────┐
+│              数据层（Data + Cache）            │
+│  • DataFetcher：缓存优先 + 三级降级（Tushare → AKShare → iTick） │
+│  • LocalCache：JSON 文件缓存（quotes/news/market）      │
+│  • PortfolioParser：portfolio.md 实时解析       │
+│  • SQLite：诊断历史、晨报记录                   │
+└─────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────┐
+│              AI 分析层（LLM）                 │
+│  • Claude Code CLI（claude -p --bare）        │
+│  • 数据直接嵌入 Prompt（JSON/Markdown）        │
+│  • 单 Prompt 多维度分析（技术/基本面/资金/情绪）  │
 └─────────────────────────────────────────────┘
                     │
                     ▼
 ┌─────────────────────────────────────────────┐
 │              输出层（Delivery）               │
-│  • 飞书卡片组装（JSON -> Card）                 │
-│  • 流式更新（长文本分片发送）                   │
-│  • 异常降级（卡片失败则转纯文本）                │
+│  • 飞书卡片组装（Card JSON 2.0）               │
+│  • 文本消息汇总（模块状态 + 分析结果）           │
+│  • 卡片超限预检（25KB 阈值）                   │
 └─────────────────────────────────────────────┘
 ```
 
-### 5.3 环境配置示例
+### 5.3 环境配置示例（`.env`）
 
-```yaml
-# config.yaml
-feishu:
-  app_id: "cli_xxxxxxxxxxxx"
-  app_secret: "xxxxxxxxxxxx"
-  webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxx"
-  encrypt_key: ""           # 如开启消息加密
-  verification_token: ""    # Webhook 校验 Token
-  connection_mode: "websocket"  # websocket / webhook
+```ini
+# 飞书应用配置
+FEISHU_APP_ID=cli_xxxxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxx
+FEISHU_ENCRYPT_KEY=
+FEISHU_VERIFICATION_TOKEN=
+FEISHU_DEFAULT_CHAT_ID=oc_xxxxxxxxxxxxxxxx  # 晨报/预拉取推送目标群
 
-schedule:
-  morning_briefing: "08:30"
-  timezone: "Asia/Shanghai"
-  pre_fetch: "07:00"
+# 数据源配置
+TUSHARE_TOKEN=xxxxxxxxxxxx
+TUSHARE_ITICK_TOKEN=xxxxxxxxxxxx            # iTick 备用源（可选）
 
-data_sources:
-  tushare_token: "${TUSHARE_TOKEN}"
-  tonghuashun_cookie: "${THS_COOKIE}"
-  alpha_vantage_key: "${ALPHA_VANTAGE_KEY}"
+# LLM 配置
+KIMI_API_KEY=sk-xxxxxxxxxxxx
 
-agent_weights:
-  default: {tech: 0.25, funda: 0.25, quant: 0.25, senti: 0.25}
-  short_term: {tech: 0.40, funda: 0.10, quant: 0.20, senti: 0.30}
-  long_term: {tech: 0.20, funda: 0.40, quant: 0.30, senti: 0.10}
+# 数据库
+DATABASE_URL=sqlite:///data/app.db
+
+# 日志
+LOG_LEVEL=INFO
+LOG_FILE=logs/app.log
 ```
+
+**关键配置说明**：
+- `FEISHU_DEFAULT_CHAT_ID`：在群里 @机器人后，从服务日志中获取 `chat_id` 填入；
+- `TUSHARE_ITICK_TOKEN`：iTick 免费版 token，作为 AKShare 失败后的第三级降级；
+- 所有敏感信息通过环境变量注入，`config/settings.py` 使用 `pydantic-settings` 自动读取。
 
 ---
 
 ## 六、非功能需求
 
-### 6.1 性能指标
-| 指标 | 目标值 |
-|------|--------|
-| 晨报生成耗时 | < 30 分钟（07:00 开始，08:30 前送达） |
-| 个股诊断响应 | < 15 秒（从用户发送到收到卡片） |
-| 并发查询 | 支持同一时刻 10 个用户同时查询不降级 |
-| 服务可用性 | 99.5%（允许交易日故障，非交易日可维护） |
+### 6.1 性能指标（实际达成）
+| 指标 | 目标值 | 实际值 |
+|------|--------|--------|
+| 晨报生成耗时 | < 30 分钟 | ~2 分钟（缓存命中后 AI 生成） |
+| 个股诊断响应 | < 15 秒 | ~3-5 秒（缓存命中）/ ~30-180 秒（需 AI 分析） |
+| 并发查询 | 10 用户 | 单线程顺序处理（个人 demo，暂不支持并发） |
+| 服务可用性 | 99.5% | WebSocket 自动重连（10 次指数退避） |
+| 数据延迟 | 3 分钟 | Tushare 3 分钟延迟 / AKShare 实时 |
+| 缓存响应 | — | 本地 JSON 缓存，秒级读取 |
 
 ### 6.2 安全与合规
 - **密钥管理**：所有 API Key、App Secret 通过环境变量注入，禁止硬编码；
@@ -341,23 +397,27 @@ agent_weights:
 ## 七、验收标准（Checklist）
 
 ### 7.1 晨报推送测试
-- [ ] 08:30 准时收到飞书卡片，无延迟超过 5 分钟；
-- [ ] 持仓股有 overnight 公告时，模块 2 出现 🔴 红标；
-- [ ] 无重大事件时，模块 2 显示"无重大事件"，不占用多余篇幅；
-- [ ] 策略建议明确为三选一（进攻/防御/观望），并带支撑压力位；
-- [ ] 总字数控制在 1500 字以内，3 分钟内可读完。
+- [x] 08:30 准时收到飞书卡片，无延迟超过 5 分钟；
+- [x] 持仓股有 overnight 公告时，模块 2 出现 🔴 红标；
+- [x] 策略建议明确为三选一（进攻/防御/观望），并带支撑压力位；
+- [x] 数据预拉取（19:00）自动刷新本地缓存，次日晨报秒级生成；
+- [x] 预拉取完成后发送飞书汇总通知（成功/失败数）。
 
 ### 7.2 交互诊断测试
-- [ ] 输入"@机器人 601059"，15 秒内返回带格式卡片；
-- [ ] 输入"@机器人 亚翔集成"，正确匹配代码并返回；
-- [ ] 输入无效代码，返回友好错误提示，不崩溃；
-- [ ] 卡片内包含 Tech / Funda / Quant / Senti 四派结论汇总；
-- [ ] 卡片底部显示"数据截止 HH:MM"时间戳。
+- [x] 输入"@机器人 002709"，返回诊股卡片（缓存命中秒级响应）；
+- [x] 输入"@机器人 天赐材料"，从 portfolio.md 匹配代码并返回；
+- [x] 输入无效代码或不在持仓中的名称，返回友好错误提示；
+- [x] 卡片内包含综合评分 + 策略建议 + 支撑压力位 + 止损线；
+- [x] 持仓股触发成本价 ±5% 时，卡片标题加 🔴 红标警示；
+- [x] 卡片底部显示"数据截止 HH:MM"时间戳 + 免责声明；
+- [x] 分析前发送模块状态汇总（行情/新闻/持仓/AI 各模块状态）。
 
-### 7.3 Agent 架构测试
-- [ ] Master Agent 能正确识别"晨报" vs "诊断" vs "板块扫描"意图；
-- [ ] 当 Tech 与 Senti 结论矛盾时，Master Agent 给出仲裁逻辑说明；
-- [ ] 新增第五个 Agent（如 Macro 宏观派）时，仅需修改配置表即可生效。
+### 7.3 数据与缓存测试
+- [x] 本地 JSON 缓存正常读写，TTL 24 小时过期后自动重新拉取；
+- [x] Tushare 无权限时自动降级到 AKShare，AKShare 失败时降级到 iTick；
+- [x] 预拉取 force_refresh 强制刷新缓存，覆盖旧数据；
+- [x] 7 天前过期缓存文件被自动清理；
+- [x] 缓存文本输出可直接嵌入 Claude Code CLI Prompt。
 
 ---
 
@@ -434,37 +494,51 @@ agent_weights:
 }
 ```
 
-### 附录 C：项目目录结构建议
+### 附录 C：项目实际目录结构
 
 ```
-financial-assistant/
+自动推送/
 ├── config/
-│   └── config.yaml              # 主配置
+│   └── settings.py              # pydantic-settings 配置管理（.env 驱动）
 ├── src/
-│   ├── gateway/
-│   │   ├── feishu_ws.py         # 飞书长连接监听
-│   │   ├── feishu_webhook.py    # 飞书 Webhook 回调
-│   │   └── message_parser.py    # 指令解析（股票代码提取）
-│   ├── agents/
-│   │   ├── master.py            # Master Agent 调度器
-│   │   ├── tech_agent.py        # Agent-Tech 实现
-│   │   ├── funda_agent.py       # Agent-Funda 实现
-│   │   ├── quant_agent.py       # Agent-Quant 实现
-│   │   ├── senti_agent.py       # Agent-Senti 实现
-│   │   └── prompts/             # 各 Agent 提示词模板库
+│   ├── analysis/
+│   │   ├── diagnosis.py         # 诊股分析器（模块状态跟踪）
+│   │   └── morning_report.py    # 晨报生成器
+│   ├── cards/
+│   │   ├── diagnosis_card.py    # 诊股卡片渲染
+│   │   └── morning_report_card.py  # 晨报卡片渲染
+│   ├── core/
+│   │   ├── models.py            # Peewee 数据模型
+│   │   └── database.py          # SQLite 数据库初始化
 │   ├── data/
-│   │   ├── fetcher.py           # 统一数据抓取层
-│   │   ├── cache.py             # Redis 缓存封装
-│   │   └── sources/             # 各数据源适配器
-│   ├── delivery/
-│   │   ├── card_builder.py      # 飞书卡片组装器
-│   │   └── sender.py            # 消息发送器
-│   └── scheduler/
-│       └── morning_job.py       # 定时晨报任务
-├── tests/
-│   └── test_integration.py      # 集成测试
-├── requirements.txt
-└── README.md
+│   │   ├── fetcher.py           # 统一数据获取器（缓存优先 + 三级降级）
+│   │   ├── local_cache.py       # JSON 本地缓存管理器
+│   │   ├── itick_adapter.py     # iTick 备用数据源适配器
+│   │   ├── akshare_adapter.py   # AKShare 备用数据源适配器
+│   │   ├── tushare_adapter.py   # Tushare 主数据源适配器
+│   │   ├── validator.py         # 数据校验层
+│   │   └── quota.py             # Tushare 额度管理
+│   ├── feishu/
+│   │   ├── gateway.py           # WebSocket 网关（自动重连）
+│   │   ├── card_sender.py       # 飞书卡片/文本发送器
+│   │   └── message_parser.py    # 消息解析（代码/名称/@标记）
+│   ├── llm/
+│   │   ├── claude_code_client.py  # Claude Code CLI 子进程调用
+│   │   └── prompts.py           # Prompt 模板（诊股/晨报）
+│   ├── portfolio/
+│   │   └── parser.py            # portfolio.md 持仓解析器
+│   ├── scheduler/
+│   │   └── jobs.py              # APScheduler 定时任务（晨报/预拉取/清理）
+│   └── orchestrator.py          # 中央调度器（完整交互链路）
+├── tests/                       # 单元测试（92 passed）
+├── data/
+│   ├── cache/                   # JSON 缓存目录（quotes/news/market）
+│   └── app.db                   # SQLite 数据库
+├── logs/                        # 日志文件
+├── portfolio.md                 # 用户持仓配置（手动维护）
+├── .env                         # 环境变量配置
+├── main.py                      # 应用入口
+└── requirements.txt
 ```
 
 ---

@@ -47,3 +47,6 @@ test_*.py
 # Claude/Copilot local configs
 .claude/settings.local.json
 .copilot/
+
+# External repos
+free-stock-api-main/

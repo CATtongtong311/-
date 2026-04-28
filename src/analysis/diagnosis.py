@@ -50,7 +50,29 @@ class DiagnosisAnalyzer:
 
     def analyze(self, symbol: str, name: str = "") -> DiagnosisResult:
         """对指定股票进行完整诊股分析，带模块状态跟踪。"""
-        logger.info("开始诊股分析: {}", symbol)
+        logger.info("开始诊股分析: symbol={} name={}", symbol, name)
+
+        # 如果 symbol 为空但 name 非空，尝试从持仓中匹配代码
+        if not symbol and name:
+            try:
+                portfolio = self.portfolio.parse()
+                for h in portfolio.holdings:
+                    if name in h.name or h.name in name:
+                        symbol = h.symbol
+                        name = h.name
+                        logger.info("中文名称匹配到持仓: {} -> {}", name, symbol)
+                        break
+            except Exception as e:
+                logger.warning("持仓匹配失败: {}", e)
+
+        # 仍未获取到代码，直接返回错误
+        if not symbol:
+            result = DiagnosisResult(symbol="", name=name, source="failed")
+            result.warnings.append("请输入有效的股票代码（如 002709）或持仓中的股票名称")
+            result.module_status = {"行情获取": "失败: 未提供股票代码"}
+            logger.error("诊股分析失败: 未提供股票代码")
+            return result
+
         result = DiagnosisResult(symbol=symbol, name=name)
         module_status: dict[str, str] = {}
 

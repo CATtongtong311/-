@@ -24,6 +24,7 @@ class FeishuConfig(BaseSettings):
     app_secret: str = Field(default="", description="飞书自建应用 App Secret")
     encrypt_key: str = Field(default="", description="消息加密密钥（可选）")
     verification_token: str = Field(default="", description="Webhook 校验 Token（可选）")
+    default_chat_id: str = Field(default="", description="默认推送群聊 ID（晨报/预拉取通知）")
 
 
 class DataSourceConfig(BaseSettings):
@@ -34,6 +35,7 @@ class DataSourceConfig(BaseSettings):
     )
 
     token: str = Field(default="", description="Tushare Pro Token")
+    itick_token: str = Field(default="", description="iTick API Token")
 
 
 class LLMConfig(BaseSettings):
