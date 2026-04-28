@@ -7,9 +7,9 @@
 ## Phases
 
 - [x] **Phase 1: 基础骨架** — 配置管理、日志、ORM、数据模型、安全基线
-- [ ] **Phase 2: 飞书连接与数据层** — WebSocket 机器人接入 + Tushare/AKShare 数据获取
-- [ ] **Phase 3: 持仓管理与 AI 大脑** — Markdown 持仓解析 + Claude/Kimi 诊股与晨报生成
-- [ ] **Phase 4: 集成调度与卡片交付** — 中央调度、卡片模板、定时晨报、端到端打通
+- [x] **Phase 2: 飞书连接与数据层** — WebSocket 机器人接入 + Tushare/AKShare 数据获取
+- [x] **Phase 3: 持仓管理与 AI 大脑** — Markdown 持仓解析 + Claude/Kimi 诊股与晨报生成
+- [x] **Phase 4: 集成调度与卡片交付** — 中央调度、卡片模板、定时晨报、端到端打通
 
 ## Phase Details
 
@@ -73,7 +73,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 基础骨架 | 0/TBD | Not started | - |
-| 2. 飞书连接与数据层 | 0/2 | Not started | - |
-| 3. 持仓管理与 AI 大脑 | 0/TBD | Not started | - |
-| 4. 集成调度与卡片交付 | 0/TBD | Not started | - |
+| 1. 基础骨架 | 1/1 | Complete | 2026-04-27 |
+| 2. 飞书连接与数据层 | 2/2 | Complete | 2026-04-27 |
+| 3. 持仓管理与 AI 大脑 | 1/1 | Complete | 2026-04-27 |
+| 4. 集成调度与卡片交付 | 1/1 | Complete | 2026-04-27 |
