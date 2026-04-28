@@ -12,24 +12,31 @@
 
 ### Validated
 
-(None yet — ship to validate)
+- 每日 08:30 定时推送个性化金融晨报（飞书消息卡片） — v1.0
+- 晨报包含：隔夜全球市场速览、持仓个股重大事件、今日重点板块前瞻 — v1.0
+- 飞书 @机器人交互，支持 A股 6 位代码 / 港股代码 / 中文简称查询 — v1.0
+- 个股诊断返回飞书交互卡片，含技术速览 + 多 Agent 会诊 + 操作建议 — v1.0
+- 内置持仓 MD 文档，机器人每次读取作为上下文进行智能分析 — v1.0
+- 持仓股有 overnight 公告时，红标警示（成本价 ±5% 触发） — v1.0
 
 ### Active
 
-- [ ] 每日 08:30 定时推送个性化金融晨报（飞书消息卡片）
-- [ ] 晨报包含：隔夜全球市场速览、持仓个股重大事件、今日重点板块前瞻
-- [ ] 飞书 @机器人交互，支持 A股 6 位代码 / 港股代码 / 中文简称查询
-- [ ] 个股诊断返回飞书交互卡片，含技术速览 + 多 Agent 会诊 + 操作建议
-- [ ] 内置持仓 MD 文档，机器人每次读取作为上下文进行智能分析
-- [ ] 持仓股有 overnight 公告时，红标警示（成本价 ±5% 触发）
+- [ ] 晨报扩展至 6 大模块（增加龙虎榜与机构动向、今日关键时间节点、大盘技术位与策略建议）
+- [ ] 晨报总字数控制在 1500 字以内
+- [ ] 卡片内添加交互按钮：[查看分时图]、[加入自选]、[深度研报]（占位）
+- [ ] 模糊匹配时提示用户确认（如"茅台"对应 600519，提示"是否查询港股 0852.HK？"）
+- [ ] 板块资金流数据获取与板块轮动跟踪
+- [ ] 舆情热度数据获取（雪球/淘股吧情绪指数）
+- [ ] 多数据源交叉验证（Tushare + AKShare + 新浪财经）
+- [ ] 历史诊断记录本地 SQLite 存储，支持"查看上次诊断"
+- [ ] 用户可标记诊股结果"准/不准"，用于后续 Prompt 优化
 
 ### Out of Scope
 
 - **高并发支持** — 个人 demo，单线程顺序处理即可
-- **Redis 缓存层** — 内存 dict 缓存足够，简化部署
+- **Redis 缓存层** — 本地 JSON 缓存已满足需求（v1.0 新增）
 - **复杂数据库架构** — SQLite 单文件即可，零运维
 - **Webhook 部署模式** — 仅 WebSocket，开发最简单
-- **全部 6 个晨报模块** — 第一期先做 3 个核心模块
 - **实时 L2 行情** — 3 分钟延迟数据足够
 - **独立 Sub-Agent 并行架构** — 第一期串行调用降低复杂度
 - **股票交易执行** — 仅分析建议，不涉及下单
@@ -38,8 +45,10 @@
 
 - 用户为个人短线投资者，跟踪半导体、AI 算力、液冷、商业航天等板块
 - 持仓以 MD 文档维护，机器人每次主动读取更新上下文
-- 数据优先使用 Tushare（免费额度）+ 新浪财经等免费接口
-- AI 文本生成以 Claude 为主模型，Kimi API 作为备选
+- 数据优先使用 Tushare（免费额度）+ AKShare + iTick 三级降级
+- AI 文本生成使用 Claude Code CLI (`claude -p`) 调用本地模型
+- v1.0 已交付：3268 行 Python，92 测试全通，3 天开发周期
+- 当前持仓：002709 天赐材料（成本 52.8）
 
 ## Constraints
 
@@ -53,11 +62,15 @@
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Python 技术栈 | 用户熟悉，金融数据生态丰富 | — Pending |
-| 持仓用 MD 文档管理 | 简单可编辑，机器人每次读取更新上下文 | — Pending |
-| Claude 为主 + Kimi 备选 | Claude 分析质量高，Kimi 成本低可兜底 | — Pending |
-| WebSocket 单模式部署 | 无需公网 IP，开发最简单 | — Pending |
-| SQLite 替代 Redis+分表 | 个人 demo 零运维 | — Pending |
+| Python 技术栈 | 用户熟悉，金融数据生态丰富 | Adopted |
+| 持仓用 MD 文档管理 | 简单可编辑，机器人每次读取更新上下文 | Adopted |
+| Claude Code CLI (`claude -p`) 为 LLM 后端 | 利用本地已安装的 Claude Code CLI，无需额外 API Key | Adopted |
+| WebSocket 单模式部署 | 无需公网 IP，开发最简单 | Adopted |
+| SQLite 替代 Redis+分表 | 个人 demo 零运维 | Adopted |
+| 本地 JSON 缓存 + iTick 备用源 | 减少 API 调用、提升响应速度；iTick 免费版作为第 3 级降级 | Adopted |
+| 每日推送晨报（不按交易日） | 用户要求每日执行，周末和法定节假日不跳过 | Adopted |
+| 中文名称通过持仓匹配代码 | 用户输入中文简称时，从 portfolio.md 匹配对应代码 | Adopted |
+| 三级数据降级（Tushare → AKShare → iTick） | 确保数据获取高可用，用户无感知切换 | Adopted |
 
 ## Evolution
 
@@ -77,4 +90,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after initialization*
+*Last updated: 2026-04-28 after v1.0 milestone*

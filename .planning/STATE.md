@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-27)
+See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** 每天开盘前 3 分钟读完晨报就知道今天该看什么；@机器人 30 秒内知道这只票能不能买。
-**Current focus:** v1 交付完成，项目就绪
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 4 of 4 (集成调度与卡片交付)
-Plan: 1 of 1 in current phase
+Milestone: v1.0 MVP — SHIPPED 2026-04-28
+Phase: 4 of 4 (all complete)
 Status: Complete
-Last activity: 2026-04-27 — Phase 4 implementation complete, all tests pass
+Last activity: 2026-04-28 — v1.0 milestone archived
 
 Progress: [████████████████████████] 100%
 
@@ -47,10 +47,12 @@ Recent decisions affecting current work:
 - Phase 1: 采用单进程异步架构，Python 3.11+，SQLite 单文件，WebSocket 单模式部署
 - Phase 1: 技术栈已确定（lark-oapi 1.5.5、APScheduler 3.11.2、tushare 1.4.29、akshare 1.18.58、peewee 3.19.0）
 - Phase 2: 飞书模块使用 lark-oapi SDK 的 WebSocket 模式，指数退避重连
-- Phase 2: 数据层采用 Tushare 主源 + AKShare 备用，自动降级
-- Phase 3: 仅使用 Kimi API（用户明确要求不接入 Claude）
+- Phase 2: 数据层采用 Tushare 主源 + AKShare 备用 + iTick 第三级降级，自动降级
+- Phase 3: 使用 Claude Code CLI (`claude -p`) 作为 LLM 后端进行诊股和晨报生成
 - Phase 3: 单 Prompt 多维度分析，输出结构化 Markdown
 - Phase 4: 每日推送晨报（不按交易日），晨报记录保留 7 天后自动删除
+- v1.0 close: 本地 JSON 缓存 + iTick 备用源正式纳入架构
+- v1.0 close: 中文名称通过持仓匹配代码正式纳入功能
 
 ### Pending Todos
 
@@ -72,6 +74,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27
-Stopped at: v1 完整交付，92 个测试全部通过
+Last session: 2026-04-28
+Stopped at: v1.0 milestone archived
 Resume file: None
