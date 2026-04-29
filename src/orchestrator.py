@@ -1,16 +1,23 @@
 """中央调度器：整合飞书消息、诊股分析、晨报生成和卡片发送。"""
 
+import asyncio
+import json
+from datetime import date
+from pathlib import Path
+
 from loguru import logger
 
 from src.analysis.diagnosis import DiagnosisAnalyzer
-from src.analysis.morning_report import MorningReportGenerator
+from src.analysis.morning_report import MorningReport, MorningReportGenerator
 from src.cards.diagnosis_card import DiagnosisCardBuilder
 from src.cards.morning_report_card import MorningReportCardBuilder
-from src.core.models import DiagnosisHistory, MorningReportRecord
+from src.core.models import DiagnosisHistory, KimiRawData, MorningReportRecord
 from src.data.fetcher import DataFetcher
+from src.data.kimi_adapter import KimiAdapter
 from src.feishu.card_sender import CardSender
 from src.feishu.message_parser import MessageParser
 from src.llm.claude_code_client import ClaudeCodeClient
+from src.llm.kimi_agent_browser import KimiAgentBrowser
 from src.portfolio.parser import PortfolioParser
 
 
@@ -25,6 +32,18 @@ class BotOrchestrator:
 
         # LLM 层（Claude Code CLI 替代 Kimi HTTP API）
         self.claude = ClaudeCodeClient()
+
+        # Kimi Agent 浏览器层（条件初始化）
+        self.kimi_browser = None
+        if settings.kimi_agent.agent_enabled:
+            try:
+                self.kimi_browser = KimiAgentBrowser(
+                    cookie_path=settings.kimi_agent.cookie_path,
+                    headless=True,
+                )
+                logger.info("KimiAgentBrowser 已初始化")
+            except Exception as e:
+                logger.warning("KimiAgentBrowser 初始化失败: {}", e)
 
         # 分析层
         self.diagnosis_analyzer = DiagnosisAnalyzer(
@@ -156,16 +175,279 @@ class BotOrchestrator:
         self.sender.send_card(chat_id, card)
         logger.info("诊股卡片已发送至 chat_id={}", chat_id)
 
+    def pre_fetch_report_data(self) -> None:
+        """07:30 预拉取晨报所需数据：全球市场 + 持仓新闻，保存到 JSON。"""
+        logger.info("开始执行晨报数据预准备...")
+        today = date.today().strftime("%Y-%m-%d")
+
+        # 1. 获取全球市场数据
+        market_data = {}
+        try:
+            market = self.data_fetcher.get_global_market()
+            if market and getattr(market, "source", "") != "failed":
+                market_data = {
+                    "dow_jones": market.dow_jones,
+                    "sp500": market.sp500,
+                    "nasdaq": market.nasdaq,
+                    "hsi_futures": market.hsi_futures,
+                    "usdx": market.usdx,
+                    "usdcnh": market.usdcnh,
+                    "us_10y": market.us_10y,
+                    "source": market.source,
+                }
+                logger.info("全球市场数据获取成功")
+            else:
+                logger.warning("全球市场数据获取失败")
+        except Exception as e:
+            logger.error("获取全球市场数据异常: {}", e)
+
+        # 2. 获取持仓个股新闻
+        holdings_news = {}
+        portfolio = PortfolioParser().parse()
+        news_ok = 0
+        news_fail = 0
+        for holding in portfolio.holdings:
+            try:
+                news = self.data_fetcher.get_news(holding.symbol)
+                if news:
+                    holdings_news[holding.symbol] = news
+                    news_ok += 1
+                else:
+                    news_fail += 1
+            except Exception as e:
+                logger.debug("获取 {} 新闻失败: {}", holding.symbol, e)
+                news_fail += 1
+        logger.info("持仓新闻获取完成: 成功 {} 只, 失败 {} 只", news_ok, news_fail)
+
+        # 3. 读取 portfolio.md 原始内容
+        portfolio_raw = ""
+        try:
+            portfolio_path = Path("portfolio.md")
+            if portfolio_path.exists():
+                portfolio_raw = portfolio_path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning("读取 portfolio.md 失败: {}", e)
+
+        # 4. 组装 input_data
+        input_data = {
+            "date_str": today,
+            "fetch_time": "07:30",
+            "market_snapshot": market_data,
+            "holdings_news": holdings_news,
+            "portfolio": {
+                "holdings": [
+                    {
+                        "symbol": h.symbol,
+                        "name": h.name,
+                        "cost_price": h.cost_price,
+                        "quantity": h.quantity,
+                        "sector": h.sector,
+                        "notes": h.notes,
+                    }
+                    for h in portfolio.holdings
+                ],
+                "watch_sectors": portfolio.watch_sectors,
+                "alerts": portfolio.alerts,
+                "raw_md": portfolio_raw,
+            },
+        }
+
+        # 5. 保存到 data/cache/report_input/{date}.json
+        cache_dir = Path("data/cache/report_input")
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path = cache_dir / f"{today}.json"
+            cache_path.write_text(
+                json.dumps(input_data, ensure_ascii=False, indent=2, default=str),
+                encoding="utf-8",
+            )
+            logger.info("晨报输入数据已保存到 {}", cache_path)
+        except Exception as e:
+            logger.error("保存晨报输入数据失败: {}", e)
+
+        # 6. 飞书通知
+        chat_id = getattr(self.settings.feishu, "default_chat_id", "")
+        if chat_id:
+            lines = ["**📊 晨报数据预准备完成**"]
+            lines.append(f"- 日期: {today}")
+            lines.append(f"- 全球市场: {'✅ 成功' if market_data else '⚠️ 失败'}")
+            lines.append(f"- 持仓新闻: {news_ok}/{len(portfolio.holdings)} 成功")
+            if news_fail > 0:
+                lines.append(f"- 新闻失败: {news_fail} 只")
+            self.sender.send_text(chat_id, "\n".join(lines))
+
+    def generate_kimi_report(self) -> None:
+        """07:35 调用 Kimi Agent 生成晨报 Markdown。"""
+        logger.info("开始执行 Kimi 晨报生成...")
+        today = date.today().strftime("%Y-%m-%d")
+
+        # 1. 读取预准备的数据
+        input_path = Path(f"data/cache/report_input/{today}.json")
+        if not input_path.exists():
+            logger.error("晨报输入数据不存在: {}", input_path)
+            chat_id = getattr(self.settings.feishu, "default_chat_id", "")
+            if chat_id:
+                self.sender.send_text(chat_id, "⚠️ Kimi 晨报生成失败：预准备数据不存在")
+            return
+
+        try:
+            input_data = json.loads(input_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.error("读取晨报输入数据失败: {}", e)
+            return
+
+        # 2. 检查 Kimi Browser 是否可用
+        if not self.kimi_browser:
+            logger.error("KimiAgentBrowser 未初始化，无法生成晨报")
+            chat_id = getattr(self.settings.feishu, "default_chat_id", "")
+            if chat_id:
+                self.sender.send_text(
+                    chat_id,
+                    "⚠️ Kimi 晨报生成失败：浏览器未初始化，启用备用方案"
+                )
+            return
+
+        # 3. 调用 Kimi Agent 生成晨报
+        result = None
+        try:
+            result = asyncio.run(self.kimi_browser.generate_report(input_data))
+        except Exception as e:
+            logger.error("Kimi Agent 生成晨报异常: {}", e)
+
+        # 4. 处理结果
+        chat_id = getattr(self.settings.feishu, "default_chat_id", "")
+
+        if not result or not result.get("success"):
+            error_msg = result.get("error", "未知错误") if result else "调用失败"
+            logger.error("Kimi 晨报生成失败: {}", error_msg)
+
+            # 保存失败记录到 KimiRawData
+            try:
+                KimiRawData.create(
+                    data_date=today,
+                    task_type="report",
+                    content="",
+                    status="failed",
+                    error_msg=error_msg,
+                    elapsed_sec=result.get("elapsed_sec") if result else None,
+                )
+            except Exception as e:
+                logger.warning("保存 Kimi 失败记录失败: {}", e)
+
+            if chat_id:
+                self.sender.send_text(
+                    chat_id,
+                    f"⚠️ Kimi 晨报生成失败：{error_msg}，启用备用方案"
+                )
+            return
+
+        # 5. 使用 KimiAdapter 清洗和校验
+        raw_markdown = result.get("markdown", "")
+        adapter_result = KimiAdapter.process(raw_markdown)
+
+        if not adapter_result.get("valid"):
+            logger.error("Kimi 返回内容校验失败: {}", adapter_result.get("error"))
+            try:
+                KimiRawData.create(
+                    data_date=today,
+                    task_type="report",
+                    content=raw_markdown[:5000],
+                    status="failed",
+                    error_msg=adapter_result.get("error", "校验失败"),
+                    elapsed_sec=result.get("elapsed_sec"),
+                )
+            except Exception as e:
+                logger.warning("保存 Kimi 校验失败记录失败: {}", e)
+
+            if chat_id:
+                self.sender.send_text(
+                    chat_id,
+                    f"⚠️ Kimi 晨报校验失败：{adapter_result.get('error')}，启用备用方案"
+                )
+            return
+
+        cleaned_markdown = adapter_result.get("cleaned", raw_markdown)
+        sentiment = adapter_result.get("sentiment", {})
+
+        # 6. 保存到 data/cache/kimi_report/{date}.md
+        report_dir = Path("data/cache/kimi_report")
+        try:
+            report_dir.mkdir(parents=True, exist_ok=True)
+            report_path = report_dir / f"{today}.md"
+            report_path.write_text(cleaned_markdown, encoding="utf-8")
+            logger.info("Kimi 晨报已保存到 {}", report_path)
+        except Exception as e:
+            logger.error("保存 Kimi 晨报失败: {}", e)
+
+        # 7. 保存原始数据到 KimiRawData 表
+        try:
+            KimiRawData.create(
+                data_date=today,
+                task_type="report",
+                content=raw_markdown[:10000],
+                status="success",
+                elapsed_sec=result.get("elapsed_sec"),
+                sentiment_mood=sentiment.get("mood"),
+                sentiment_score=sentiment.get("score"),
+            )
+            logger.info("Kimi 原始数据已保存到数据库")
+        except Exception as e:
+            logger.warning("保存 Kimi 原始数据失败: {}", e)
+
+        # 8. 飞书通知
+        if chat_id:
+            mood = sentiment.get("mood", "未知")
+            score = sentiment.get("score")
+            lines = ["**✅ Kimi 晨报生成完成**"]
+            lines.append(f"- 日期: {today}")
+            lines.append(f"- 情绪: {mood}")
+            if score is not None:
+                lines.append(f"- 得分: {score}/100")
+            lines.append(f"- 耗时: {result.get('elapsed_sec', 0):.1f}秒")
+            lines.append(f"- 长度: {len(cleaned_markdown)} 字符")
+            self.sender.send_text(chat_id, "\n".join(lines))
+
     def send_morning_report(self, chat_id: str = "") -> None:
-        """生成并发送晨报，汇总各模块状态。"""
+        """生成并发送晨报，优先使用 Kimi 生成的缓存，否则降级到本地生成。"""
         if not chat_id:
             chat_id = getattr(self.settings.feishu, "default_chat_id", "")
 
         logger.info("开始生成并发送晨报到 chat_id={}", chat_id)
+        today = date.today().strftime("%Y-%m-%d")
 
-        report = self.morning_report_generator.generate()
+        # 1. 优先读取 Kimi 生成的晨报缓存
+        kimi_report_path = Path(f"data/cache/kimi_report/{today}.md")
+        report = None
 
-        # 汇总模块状态
+        if kimi_report_path.exists():
+            logger.info("检测到 Kimi 晨报缓存，直接使用")
+            try:
+                content = kimi_report_path.read_text(encoding="utf-8")
+                # 尝试提取情绪信息
+                sentiment = KimiAdapter().extract_sentiment(content)
+                report = MorningReport(
+                    date=today,
+                    content=content,
+                    source="kimi",
+                    module_status={"Kimi 缓存": "成功"},
+                )
+                # 附加情绪数据到 report 对象（供卡片渲染使用）
+                if sentiment.get("mood"):
+                    report.sentiment = {
+                        "mood": sentiment.get("mood"),
+                        "score": sentiment.get("score"),
+                    }
+                logger.info("Kimi 晨报缓存加载成功，长度={}", len(content))
+            except Exception as e:
+                logger.error("读取 Kimi 晨报缓存失败: {}", e)
+                report = None
+
+        # 2. 如果没有 Kimi 缓存，调用本地生成器
+        if not report:
+            logger.info("未检测到 Kimi 晨报缓存，调用本地生成器")
+            report = self.morning_report_generator.generate()
+
+        # 3. 汇总模块状态
         if report.module_status:
             status_lines = ["**晨报生成模块状态：**"]
             for module, status in report.module_status.items():
@@ -173,19 +455,28 @@ class BotOrchestrator:
                 status_lines.append(f"{icon} {module}: {status}")
             self.sender.send_text(chat_id, "\n".join(status_lines))
 
-        # 保存晨报记录
+        # 4. 保存晨报记录（包含情绪数据）
         try:
+            sentiment_mood = None
+            sentiment_score = None
+            if hasattr(report, "sentiment") and isinstance(report.sentiment, dict):
+                sentiment_mood = report.sentiment.get("mood")
+                sentiment_score = report.sentiment.get("score")
+
             MorningReportRecord.create(
                 report_date=report.date,
                 content=report.content,
                 source=report.source,
                 chat_id=chat_id,
                 warnings="\n".join(report.warnings),
+                kimi_source="cache" if report.source == "kimi" else "",
+                sentiment_mood=sentiment_mood,
+                sentiment_score=sentiment_score,
             )
         except Exception as e:
             logger.warning("保存晨报记录失败: {}", e)
 
-        # 构建并发送卡片
+        # 5. 构建并发送卡片
         if report.source == "failed":
             self.sender.send_text(
                 chat_id,

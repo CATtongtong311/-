@@ -1,11 +1,11 @@
 # Milestones: 智能金融晨报与交互分析系统
 
-## v1.0 MVP — 2026-04-28
+## v1.0 MVP — 2026-04-30
 
 **Status:** Shipped
-**Phases:** 1-4 | **Plans:** 4 | **Tasks:** 30+
-**Timeline:** 2026-04-25 → 2026-04-28 (3 days)
-**Code:** 3,268 LOC Python | **Tests:** 92 passed, 0 failed
+**Phases:** 1-5 | **Plans:** 5 | **Tasks:** 37+
+**Timeline:** 2026-04-25 → 2026-04-30 (5 days)
+**Code:** ~4,000 LOC Python | **Tests:** 100+ passed, 0 failed
 
 ### What Was Built
 
@@ -19,6 +19,8 @@
 4. **定时自动化** — APScheduler 每日 08:30 晨报推送，03:00 清理 7 天前记录，支持手动触发
 5. **本地 JSON 缓存** — 秒级响应，24h TTL，7 天过期自动清理，减少 API 调用成本
 6. **中文名称诊股** — 从 portfolio.md 匹配股票代码，解决 symbol 为空导致行情获取失败的问题
+7. **Kimi Agent 网页直出晨报** — Playwright 自动化访问 Kimi 生成完整 Markdown 晨报，固定等待 7 分钟策略确保思考过程完成后提取，文本去污染（坐标过滤 + 思考过程过滤），Claude Code CLI 作为降级备用
+8. **智能飞书卡片渲染** — 章节拆分渲染，一级/二级标题差异化（颜色 + 字号 + emoji），制表符表格自动转 Markdown 表格，情绪评级动态主题色
 
 ### Known Deferred Items at Close
 

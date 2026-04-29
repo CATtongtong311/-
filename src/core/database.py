@@ -26,7 +26,7 @@ def get_db() -> SqliteDatabase:
 
 def init_db() -> None:
     """初始化数据库：创建所有表。"""
-    from src.core.models import ApiCallLog, DiagnosisHistory, MorningReportRecord, PortfolioCache
+    from src.core.models import ApiCallLog, DiagnosisHistory, KimiRawData, MorningReportRecord, PortfolioCache
 
     db = get_db()
-    db.create_tables([PortfolioCache, DiagnosisHistory, ApiCallLog, MorningReportRecord], safe=True)
+    db.create_tables([PortfolioCache, DiagnosisHistory, ApiCallLog, KimiRawData, MorningReportRecord], safe=True)

@@ -58,11 +58,13 @@ def main():
 
     # 5. 创建定时任务调度器
     scheduler = SchedulerManager(
-        morning_report_func=orchestrator.send_morning_report,
+        morning_report_send_func=orchestrator.send_morning_report,
+        pre_fetch_report_data_func=orchestrator.pre_fetch_report_data,
+        kimi_generate_func=orchestrator.generate_kimi_report,
         pre_fetch_func=orchestrator.pre_fetch_data,
         chat_id=getattr(settings.feishu, "default_chat_id", ""),
         hour=8,
-        minute=30,
+        minute=0,
     )
     logger.info("定时调度器就绪")
 

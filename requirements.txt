@@ -27,5 +27,8 @@ akshare>=1.18.11
 anthropic>=0.97.0
 openai>=1.99.0
 
+# Browser Automation
+playwright>=1.40.0
+
 # Dev
 types-peewee

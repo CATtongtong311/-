@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Milestone: v1.0 MVP — SHIPPED 2026-04-28
-Phase: 4 of 4 (all complete)
+Phase: 5 of 5 (Kimi Agent 网页直出晨报 — 已验证)
 Status: Complete
-Last activity: 2026-04-28 — v1.0 milestone archived
+Last activity: 2026-04-30 — Kimi Agent 端到端链路验证通过，飞书卡片格式优化完成
 
 Progress: [████████████████████████] 100%
 
@@ -30,9 +30,10 @@ Progress: [███████████████████████
 | 02-feishu-data | 2 | - | - |
 | 03-ai-analysis | 1 | - | - |
 | 04-integration | 1 | - | - |
+| 05-kimi-agent | 1 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 02-01, 02-02, 03-01, 04-01
+- Last 5 plans: 02-01, 02-02, 03-01, 04-01, 05-01
 - Trend: stable
 
 *Updated after each plan completion*
@@ -53,6 +54,11 @@ Recent decisions affecting current work:
 - Phase 4: 每日推送晨报（不按交易日），晨报记录保留 7 天后自动删除
 - v1.0 close: 本地 JSON 缓存 + iTick 备用源正式纳入架构
 - v1.0 close: 中文名称通过持仓匹配代码正式纳入功能
+- Phase 5: Kimi Agent (https://www.kimi.com/agent) 作为晨报生成主引擎，Claude Code CLI 作为降级备用
+- Phase 5: 固定等待 7 分钟策略替代纯轮询检测，确保 Kimi 思考过程滚动完毕后再提取内容
+- Phase 5: 文本提取去污染：坐标过滤 + 思考过程关键词过滤 + prompt 前 100 字符排除
+- Phase 5: 飞书卡片章节拆分渲染：一级标题 blue + heading，二级标题 grey + normal，智能 hr 分割线
+- Phase 5: sentiment 正则扩展同时支持 Markdown 加粗格式和纯文本制表符格式
 
 ### Pending Todos
 
@@ -74,6 +80,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-28
-Stopped at: v1.0 milestone archived
+Last session: 2026-04-30
+Stopped at: Phase 5 端到端验证通过，飞书卡片格式优化完成，GSD 计划更新中
 Resume file: None

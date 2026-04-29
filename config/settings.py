@@ -67,6 +67,30 @@ class DatabaseConfig(BaseSettings):
     )
 
 
+class KimiAgentConfig(BaseSettings):
+    """Kimi Agent 网页自动化配置。"""
+
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, env_file_encoding="utf-8", env_prefix="KIMI_", extra="ignore"
+    )
+
+    agent_enabled: bool = Field(default=True, description="是否启用 Kimi Agent 生成晨报")
+    cookie_path: str = Field(
+        default=str(PROJECT_ROOT / "data" / "kimi_cookies.json"),
+        description="Cookie 文件路径",
+    )
+    send_timeout: int = Field(default=1200, description="Kimi 回复超时（秒），默认 20 分钟")
+    nav_timeout: int = Field(default=30, description="页面导航超时（秒）")
+    poll_interval: int = Field(default=5, description="轮询检测间隔（秒）")
+    fallback_enabled: bool = Field(
+        default=True, description="Kimi 失败时是否降级到 Claude"
+    )
+    fixed_wait_sec: int = Field(
+        default=0,
+        description="发送后固定等待秒数（0=禁用，使用轮询模式）。Kimi 思考过程较长时建议设为 420（7分钟）",
+    )
+
+
 class LogConfig(BaseSettings):
     """日志配置。"""
 
@@ -95,6 +119,7 @@ class Settings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     log: LogConfig = Field(default_factory=LogConfig)
+    kimi_agent: KimiAgentConfig = Field(default_factory=KimiAgentConfig)
 
     def check_llm_key(self) -> str:
         """返回可用的 LLM API Key，仅使用 Kimi。"""

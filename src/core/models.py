@@ -60,6 +60,24 @@ class ApiCallLog(BaseModel):
         table_name = "api_call_log"
 
 
+class KimiRawData(BaseModel):
+    """Kimi 原始数据表：保存 Kimi Agent 生成的原始回复内容。"""
+
+    data_date = DateField(index=True, help_text="数据日期")
+    task_type = CharField(max_length=20, help_text="任务类型：report/full/error")
+    content = TextField(help_text="Kimi 原始回复内容")
+    fetch_time = DateTimeField(default=datetime.now, help_text="获取时间")
+    status = CharField(max_length=20, default="success", help_text="状态：success/failed")
+    error_msg = TextField(null=True, help_text="错误信息")
+    elapsed_sec = IntegerField(null=True, help_text="耗时（秒）")
+    sentiment_mood = CharField(max_length=20, null=True, help_text="情绪标签：乐观/中性/悲观")
+    sentiment_score = IntegerField(null=True, help_text="情绪评分 0-100")
+
+    class Meta:
+        table_name = "kimi_raw_data"
+        indexes = (("data_date", "task_type"), True)
+
+
 class MorningReportRecord(BaseModel):
     """晨报记录表：保留最近 7 天的晨报，过期自动清理。"""
 
@@ -69,6 +87,11 @@ class MorningReportRecord(BaseModel):
     chat_id = CharField(max_length=100, default="", help_text="推送到的群聊 ID")
     sent_at = DateTimeField(default=datetime.now, help_text="发送时间")
     warnings = TextField(default="", help_text="生成过程中的警告信息")
+    # 扩展字段：Kimi 来源与情绪数据
+    kimi_source = CharField(max_length=50, default="", help_text="Kimi 具体来源标识")
+    sentiment_mood = CharField(max_length=20, null=True, help_text="情绪标签：乐观/中性/悲观")
+    sentiment_score = IntegerField(null=True, help_text="情绪评分 0-100")
+    generation_elapsed_sec = IntegerField(null=True, help_text="生成耗时（秒）")
 
     class Meta:
         table_name = "morning_report_record"
