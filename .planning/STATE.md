@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** 每天开盘前 3 分钟读完晨报就知道今天该看什么；@机器人 30 秒内知道这只票能不能买。
-**Current focus:** Planning next milestone
+**Current focus:** v2.0 里程碑规划 — Phase 6 交互增强与记录反馈
 
 ## Current Position
 
-Milestone: v1.0 MVP — SHIPPED 2026-04-28
-Phase: 5 of 5 (Kimi Agent 网页直出晨报 — 已验证)
-Status: Complete
-Last activity: 2026-04-30 — Kimi Agent 端到端链路验证通过，飞书卡片格式优化完成
+Milestone: v2.0 智能增强版 — PLANNING
+Phase: 6 of 8 (交互增强与记录反馈)
+Status: Planning
+Last activity: 2026-04-30 — v2.0 milestone planning started
 
 Progress: [████████████████████████] 100%
 
@@ -81,5 +81,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-04-30
-Stopped at: Phase 5 端到端验证通过，飞书卡片格式优化完成，GSD 计划更新中
+Stopped at: v2.0 milestone planning started
 Resume file: None
