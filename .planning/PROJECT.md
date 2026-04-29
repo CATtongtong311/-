@@ -18,6 +18,8 @@
 - 个股诊断返回飞书交互卡片，含技术速览 + 多 Agent 会诊 + 操作建议 — v1.0
 - 内置持仓 MD 文档，机器人每次读取作为上下文进行智能分析 — v1.0
 - 持仓股有 overnight 公告时，红标警示（成本价 ±5% 触发） — v1.0
+- Kimi Agent 网页直出晨报，Playwright 自动化提取完整 Markdown — v1.0 Phase 5
+- 飞书卡片智能章节渲染，一级/二级标题差异化样式 + 情绪评级动态主题色 — v1.0 Phase 5
 
 ### Active
 
@@ -46,8 +48,8 @@
 - 用户为个人短线投资者，跟踪半导体、AI 算力、液冷、商业航天等板块
 - 持仓以 MD 文档维护，机器人每次主动读取更新上下文
 - 数据优先使用 Tushare（免费额度）+ AKShare + iTick 三级降级
-- AI 文本生成使用 Claude Code CLI (`claude -p`) 调用本地模型
-- v1.0 已交付：3268 行 Python，92 测试全通，3 天开发周期
+- AI 文本生成：Kimi Agent 网页为主引擎，Claude Code CLI (`claude -p`) 为降级备用
+- v1.0 已交付：5 个阶段，~4000 行 Python，100+ 测试全通，5 天开发周期（2026-04-25 → 2026-04-30）
 - 当前持仓：002709 天赐材料（成本 52.8）
 
 ## Constraints
@@ -71,6 +73,10 @@
 | 每日推送晨报（不按交易日） | 用户要求每日执行，周末和法定节假日不跳过 | Adopted |
 | 中文名称通过持仓匹配代码 | 用户输入中文简称时，从 portfolio.md 匹配对应代码 | Adopted |
 | 三级数据降级（Tushare → AKShare → iTick） | 确保数据获取高可用，用户无感知切换 | Adopted |
+| Kimi Agent 作为晨报生成主引擎 | Kimi 联网搜索能力更强，晨报内容更丰富；Claude CLI 保留为降级备用 | Adopted |
+| 固定等待 7 分钟策略 | 替代纯轮询检测，确保 Kimi 思考过程滚动完毕后再提取内容 | Adopted |
+| 文本提取去污染（坐标+思考过滤） | 去除 Kimi 网页中的坐标标记和思考过程，确保输出纯净 Markdown | Adopted |
+| 飞书卡片章节拆分渲染 | 一级/二级标题差异化样式，提升可读性 | Adopted |
 
 ## Evolution
 
@@ -90,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after v1.0 milestone*
+*Last updated: 2026-04-30 after v1.0 milestone (Phase 5 Kimi Agent complete)*
